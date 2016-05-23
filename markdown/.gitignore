@@ -1,0 +1,8 @@
+*.pdf
+*.tiff
+*.tif
+*.csv
+*.txt
+*.tsv
+gbif_summary.Rmd
+data/
