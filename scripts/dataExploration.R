@@ -1,5 +1,5 @@
 #anolis exploratory data analysis: is A. gundlachi moving downhill and/or following forest regeneration in Puerto Rico? 
-library(data.table);library(ggplot2);library(raster)
+library(data.table);library(ggplot2);library(raster);library(plyr)
 
 gbif <- data.frame(fread("~/Downloads/gbif_Agundlachi.csv"))
 gbif$yearbin <- gbif$year > 1980
