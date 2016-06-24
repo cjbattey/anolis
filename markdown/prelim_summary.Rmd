@@ -55,12 +55,11 @@ anolis.pts <- SpatialPointsDataFrame(data.frame(coords$decimalLongitude,coords$d
 anolis.alt <- extract(alt,anolis.pts) 
 anolis$alt[anolis$hascoords=="coordinates"] <- anolis.alt
 
-
 ######### descriptive stats and summary plots #########
 #check number of pre/post 1980 reports by species, filter for species w n reports per era
 sp.reps <- ddply(anolis,.(species,timebin),summarize,reports=length(species))
 common.species <- ddply(sp.reps,.(species),summarize,reports=min(reports))
-common.species <- common.species$species[common.species$reports >= 100]
+common.species <- common.species$species[common.species$reports >= 200]
 anolis <- subset(anolis,species %in% common.species)
 anolis$species <- factor(anolis$species)
 
