@@ -1,0 +1,144 @@
+---
+title: 'Anolis Elevation Shifts: Prelim Summary'
+author: "CJ Battey"
+date: "May 20, 2016"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T)
+knitr::opts_chunk$set(tidy = T)
+```
+Background: 
+Tropical montane species are thought to be particularly vulnerable to extinction under climate change because they occupy relatively narrow thermal niches and have a finite amount of higher-elevation habitat to occupy in the future. Simple models relating species' ranges to climatic conditions assume that as air temperatures increase, montane species will move uphill to track a thermal niche. However, physiological studies have found that body temperatures in many ectotherms are regulated via fine-scale habitat selection and microclimatic variation between (for example) forested and open habitats. Changes in average temperatures over time or along an altitudinal transect may thus be secondary to local variation in microclimate caused by shifts in land-use or habitat structure when predicting shifts in species' distributions. 
+
+Reforestation of former agricultural lands in Puerto Rico over the course of the 20th century offers an opportunity to compare the impacts of changes in air temperatures and land use in driving shifts in species' ranges. Lizards in the genus *Anolis* are a model system in the fields of ecomorphology, island biogeography, and thermal physiology, and have been studied intensively in Puerto Rico since at least the 1960's. *A. gundlachi* is a forest specialist historically considered a montane species, while *A. cristatellus* is a habitat generalist found primarily at low elevations. Anecdotal reports suggest that *gundlachi* is now thriving at low-elevation sites that were inhabited only by *cristatellus* during the early 1970's, but no published study has assessed shifts in *Anolis* elevational range quantitatively. 
+
+We used aggregated specimen records from natural history museums to assess changes in the distributions of these species in Puerto Rico during the twentieth century. Specifically, we ask:  
+
+1. Has *A. gundlachi* expanded to lower elevations since the 1970's?  
+2. Are range shifts in *A. gundlachi* (if any) better explained by changes in climate or landcover?  
+
+
+#*Anolis* Occurrence Data
+####Species Occurrence Points
+We downloaded all records of natural history specimens in the genus *Anolis* collected in Puerto Rico from the Global Biodiversity Information Facility (GBIF). Because GBIF incorporates data from many partner institutions, missing data caused by inconsistent formatting is a persistent problem. In addition, many specimens either lack georeferenced locality information, or were perviously georeferenced with paper atlases at relatively low precision. We developed a set of scripts to automate cleaning of GBIF data via (1) parsing ambiguous date formats  and (2) add verbatim elevations when these were included in the text locality. We then manually georeferenced all localities with greater than ten specimen collections using the Google Maps API to measure road kilometers and Google Earth to locate point localities. We followed the vertNet.org best-practices for georeferencing and calculated uncertainty to the nearest 100M for all points. All localities were georeferenced by the same individual using the same protocol. We then filtered the dataset to exclude specimens with greater than 1km georeferencing uncertainty. 
+
+The cleaned dataset includes 7,770 reports across 6 species. Most collection records occurred in two periods: 1970-1980, and 2000-2010. 
+The largest collections included in the final dataset are from the MCZ and MVZ. Additional records from AMNH have yet to be added to the dataset. KU has a large collected with diverse sampling localities, but the written localities are not specific enough to allow georeferencing at or below 1km uncertainty. 
+
+\newpage
+```{r message=F,fig.height=4,warning=F}
+setwd("/R/anolis/")
+anolis <- read.csv("~/Dropbox/anolis/data/anolis_data.csv")
+```
+
+Fig 1. Georeferenced *Anolis* specimen localities. Base layer is elevation.
+
+
+```{r fig.height=2.5}
+#distribution of collections across museums
+museums <- ddply(anolis,.(institutionCode,timebin),summarize,Reports=length(species))
+ggplot(data=museums,aes(x=substr(institutionCode,1,4),y=Reports,fill=timebin))+theme(axis.text.x = element_text(angle = 90, hjust =1,vjust=.5,size=6))+xlab("")+
+  geom_bar(stat="identity")+ylab("Specimens")+ggtitle("Specimens  per Institution")
+```
+
+```{r fig.height=2.5}
+years <- ddply(subset(anolis,year>1960),.(year,species),summarize,Reports=length(pt.alt))
+ggplot(data=years,aes(x=year,y=Reports,fill=species))+theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  geom_bar(stat="identity")+ylab("Specimens")+xlab("")
+```
+
+Fig 2-3. Specimen source and time summaries.  
+
+#Preliminary Elevation Analysis
+Looking at the raw data without correcting for differences in survey effort, all species show significant shifts in mean elevation. Three species (evermanni, krugi, and gundlachi) declined in elevation
+
+```{r }
+ddply(anolis,.(species),function (i){
+  t <- t.test(i$pt.alt~i$timebin)
+  p <- round(t$p.value,5)
+  means <- round(t$estimate,digits=2)
+  diff <- round(t$conf.int,digits=2)
+  sum <- c(pre=means[1],post=means[2],diff=means[2]-means[1],ci=paste(round(diff[1],2),"-",round(diff[2],2)),p=p)
+  names(sum) <- c("pre","post","difference","CI","p")
+  sum
+})
+```
+
+```{r warning=F, fig.height=3, message=F}
+ggplot(data=anolis,aes(x=timebin,y=pt.alt))+facet_grid(.~species)+theme_bw()+xlab("")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),strip.text.x=element_text(size=6))+
+  ggtitle("Median Report Elevation, Pre vs. Post 1980")+
+  geom_point(size=.5,alpha=0.1,position="jitter",col="grey")+
+  geom_boxplot(notch=F,outlier.colour = NA,fill=NA)
+  
+```
+
+Figure 4. Boxplot of time-binned specimen elevations. Center is median, box is 25th and 75th percentile, bars give max/min excluding outliers.  
+
+```{r warning=F, fig.height=3, message=F}
+ggplot(data=subset(anolis,year>1960),aes(x=year,y=pt.alt))+facet_grid(.~species)+theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),strip.text.x=element_text(size=6))+
+  scale_x_continuous(breaks=c(1960,2000))+
+  geom_point(size=1,alpha=0.3)+
+  geom_smooth(method="lm")
+```
+Figure 5. Same data with time as a continuous variable.
+\newpage
+
+##Survey Effort
+It seems likely that variation in survey effort is driving at least some of this pattern. For example, in *A. krugi* the large number of high-elevation reports collected at single localities during 1955-1980 pulls the "pre" average up to the approximate height of El Verde despite the presence of records all the way down to sea level in both periods. It's hard to know if those reports represent higher density of *krugi* at high altitudes, or higher survey effort. If we bin altitudes across all reports and split by time period, it looks like collecting effort has been more or less constant at low altitudes but has dropped substantially at high altitudes. Here's a summary across the six commonly collected species of *Anolis*:
+
+```{r fig.width=2,fig.height=2.5}
+anolis$altbin <- cut(anolis$pt.alt,seq(0,max(anolis$pt.alt),250),labels=c("0-250","250-500","500-750","750-1000"))
+anolis.altbin <- subset(anolis,is.na(altbin)==F)
+altsummary <- ddply(anolis.altbin,.(timebin,altbin,species),summarize,n=length(species))
+ggplot(data=altsummary,aes(x=timebin,y=n,fill=altbin))+geom_bar(stat="identity")+ylab("Specimens")+
+  ggtitle("All Anolis")+theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position="none")
+```
+```{r fig.height=2.5,fig.width=5}
+ggplot(data=altsummary,aes(x=timebin,y=n,fill=altbin))+geom_bar(stat="identity")+ggtitle("Per Species")+
+  facet_grid(.~species)+ylab("")+scale_fill_discrete(name="Altitude (M)")+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),strip.text.x = element_text(size = 6))
+```
+
+One way to control some of the bias in survey effort is to restrict our analysis to elevations below 250M where the total number of specimens in both periods is fairly constant. Then we can ask: "has the relative abundance of gundlachi increased at low elevations between survey periods?" Using a chi-squared test across all species we get:  
+
+Chi-Squared Matrix|pre    |post
+------------------|-------|-------
+*A. gundlachi*    |837    |458
+*Anolis sp*       |3754   |2775
+
+```{r tidy=T}
+low <- subset(anolis,pt.alt<=250)
+n.sp.pre <- nrow(subset(low,species=="Anolis gundlachi" & timebin=="1955-1980"))
+n.sp.post <- nrow(subset(low,species=="Anolis gundlachi" & timebin=="1980-2015"))
+n.all.pre <- nrow(subset(low,timebin=="1955-1980"))
+n.all.post <- nrow(subset(low,timebin=="1980-2015"))
+chimatrix <- matrix(c(n.sp.pre,n.sp.post,n.all.pre,n.all.post),byrow = T, nrow = 2)
+chisq.test(chimatrix)
+```
+  
+The fraction of *A. gundlachi* collected below 500 meters has increased from around 9% in 1955-1980 to 20% in 1980-2016 (p<<0.01). This is the simplest version of what Siever Rohwer has called an "abundance index" in a few recent publications aimed at describing shifts in bird distributions in Mexico. If I loop the above analysis to compare across species, it looks like five of six show significant differences in relative abundance below 500 meters.  
+
+```{r}
+anolischi2fun <- function(i){
+n.sp.pre <- nrow(subset(low,species==i & timebin=="1955-1980"))
+n.sp.post <- nrow(subset(low,species==i & timebin=="1980-2015"))
+n.all.pre <- nrow(subset(low,timebin=="1955-1980"))
+n.all.post <- nrow(subset(low,timebin=="1980-2015"))
+chimatrix <- matrix(c(n.sp.pre,n.sp.post,n.all.pre,n.all.post),byrow = T, nrow = 2)
+chi <- chisq.test(chimatrix)
+c(i,round(n.sp.pre/n.all.pre,3),round(n.sp.post/n.all.post,3),round(chi$p.value,5))
+}
+chi2table <- data.frame(foreach(i=levels(factor(low$species)),.combine=rbind) %do% anolischi2fun(i),row.names=NULL)
+names(chi2table) <- c("Species","relAbund.pre","relAbund.post" ,"p")
+chi2table
+```
+
+#Landcover
+\newpage
+
+Hurricanes Hugo+George. Check A. cuvieri records (additional forest). Make sure we have Paul Hertz' localities. 
+Carabali site (near 191 @ low altitude ~ 20M)
+

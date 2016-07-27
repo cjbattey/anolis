@@ -1,9 +1,10 @@
 #load, filter, and georeference occurrence records
 setwd("~/Dropbox/anolis/")
 library(data.table);library(raster);library(ggplot2);library(plyr);library(foreach);library(stringr);library(magrittr);library(dismo);library(rgeos)
-ext <- extent(-67.5,-65.5,17.8,18.7)
+ext.pr <- extent(-67.6,-65.2,17.8,18.7)
+ext.yunque <- extent(825000,850000,2015000,2040000)
 
-#use bash to remove embedded nulls in GBIF output (accented characters apparently not in UTF-8...)
+#remove embedded nulls in GBIF output (UTF-16?)
 file <- "./data/locs/gbif_PRanolis/occurrence.txt"
 tt <- tempfile()  
 system(paste0("tr < ", file, " -d '\\000' >", tt))
@@ -18,6 +19,8 @@ anolis <- anolis[names(anolis) %in% c("gbifID","institutionCode","basisOfRecord"
 anolis <- subset(anolis,basisOfRecord=="PRESERVED_SPECIMEN" & species != "") 
 
 ### Dealing with museums that suppress locality or date on GBIF 
+anolis <- subset(anolis,locality != "")
+
 #FMNH
 fmnh.mus <- read.csv("~/Dropbox/anolis/data/locs/fmnh_anolis.csv")
 names(fmnh.mus) <- c("catalogNumber","collectionNumber","Taxon","verbatimLocality","Details","verbatimEventDate","Details2",
@@ -29,7 +32,6 @@ fmnh.gbif$locality <- fmnh.merge$verbatimLocality.y
 fmnh.gbif$verbatimEventDate <- fmnh.merge$verbatimEventDate.y
 anolis <- rbind(anolis,fmnh.gbif)
 
-#AMNH
 anolis <- subset(anolis,institutionCode %in% c("AMNH","Royal Ontario Museum: ROM")==F)
 
 #LSU, UMMZ also suppress most data
@@ -69,10 +71,6 @@ anolis <- rbind(anolis,baddates)                                                
 anolis$timebin <- factor(anolis$year < 1980)
 levels(anolis$timebin) <- c("1980-2015","1955-1980")
 anolis$timebin <- factor(anolis$timebin,levels=c("1955-1980","1980-2015"))
-anolis$hascoords <- factor(!is.na(anolis$decimalLatitude) & !is.na(anolis$decimalLongitude))
-levels(anolis$hascoords) <- c("locality","coordinates")
-
-anolis <- subset(anolis,locality != "")
 anolis$eventID <- paste(anolis$institutionCode,anolis$locality,anolis$year,sep=",")
 
 ##################################################################
@@ -103,41 +101,26 @@ for(i in 1:nrow(anolis)){
   }
 }
 
-#13787 records with locality
-#9080 records with coordinates or verbatim elevations
-#7380 with one of: GPS, verbatim elevation, or stated coordinate uncertainty
-
 #############################################################
 ########### georeferencing text localities ##################
 #############################################################
+#write locality table to file for manual georeferencing
 # georef <- subset(anolis,grepl("gps|GPS",anolis$locality) | !(year>=2000 & hascoords=="coordinates"))
 # localities <- ddply(georef,.(locality,verbatimLocality,institutionCode,recordedBy,year,georeferenceSources,decimalLatitude,
 #                              decimalLongitude,coordinateUncertaintyInMeters,elevation),summarize,n=length(day))
 # loc <- ddply(anolis,.(locality,eventID),summarize,n=length(gbifID))
 # write.csv(loc,"anolis_localities.csv",row.names = F,fileEncoding = "UTF-8")
 
-#manually check localities in Google Earth and join back to anolis table
-localities <- data.frame(fread("~/Downloads/anolis_localities - anolis_localities (2).csv",encoding="UTF-8"))
+#add georeferenced coordinates. use gbif coords if collected by gps.
+#note: looks like some likely gps coords have NA sources on gbif.
+localities <- data.frame(fread("~/Dropbox/anolis/data/locs/anolis_localities_21Jul16.csv",encoding="UTF-8"))
 anolis <- join(anolis,localities,by=c("locality","eventID"),type="left",match="first")
-anolis$lat[grep("GPS|gps",anolis$georeferenceSources)] <- anolis$decimalLatitude[grep("GPS|gps",anolis$georeferenceSources)]
-anolis$long[grep("GPS|gps",anolis$georeferenceSources)] <- anolis$decimalLongitude[grep("GPS|gps",anolis$georeferenceSources)]
-
-#add UTM zone and coordinates
-anolis$utmZone[anolis$long < -66] <- 19
-anolis$utmZone[anolis$long > -66] <- 20
-for(i in 1:nrow(anolis)){
-  if(!is.na(anolis[i,]$utmZone)){
-    utm <- data.frame(anolis[i,"long"],anolis[i,"lat"]) %>%
-                          SpatialPoints(.,proj4string=crs(alt)) %>%
-                            spTransform(.,crs(paste0("+proj=utm +zone=",anolis[i,"utmZone"],"+north +ellps=WGS84 +datum=WGS84 +units=m +no_defs"))) %>%
-                              data.frame(.)
-    anolis[i,"utmW"] <- utm[1]
-    anolis[i,"utmN"] <- utm[2]
-  }
-}
+anolis$lat[anolis$year>1997 & !is.na(anolis$decimalLatitude)] <- anolis$decimalLatitude[anolis$year>1997 & !is.na(anolis$decimalLatitude)]
+anolis$long[anolis$year>1997 & !is.na(anolis$decimalLatitude)] <- anolis$decimalLongitude[anolis$year>1997 & !is.na(anolis$decimalLatitude)]
+anolis$uncertainty[anolis$year>1997 & !is.na(anolis$decimalLatitude)] <- 30
 
 ##############################################################
-############# get altitude from coordinates ##################
+############### extract coordinate elevations ################
 ##############################################################
 ####read in and merge altitude rasters (1-arc-sec = ~30M)
 # setwd("~/Dropbox/anolis/data/elevation/")
@@ -151,50 +134,33 @@ for(i in 1:nrow(anolis)){
 # writeRaster(alt,"PuertoRico_altitude_1sec_USGSNED2013.tif")
 
 #load merged 1" altitudes, extract from coordinates
-alt <- raster("~/Dropbox/anolis/data/elevation/PuertoRico_altitude_1sec_USGSNED2013.tif")
+alt <- raster("~/Dropbox/anolis/data/alt_30s_bil/alt.bil") %>% crop(ext.pr)
+alt1s<- raster("~/Dropbox/anolis/data/elevation/PuertoRico_altitude_1sec_USGSNED2013.tif") %>% crop(ext.pr)
 
-#extract point localities (test only)
-anolis$pointAlt[!is.na(anolis$lat)] <- extract(alt,SpatialPoints(data.frame(anolis$long[!is.na(anolis$lat)],anolis$lat[!is.na(anolis$lat)]))) 
+#extract point localities
+#anolis$pt.alt[!is.na(anolis$lat)] <- extract(alt,SpatialPoints(data.frame(anolis$long[!is.na(anolis$lat)],anolis$lat[!is.na(anolis$lat)]))) 
 
-#extract mean altitude of buffered uncertainty radius
-for(i in 1:nrow(anolis)){
-  row <- anolis[i,]
-  if(!is.na(row$utmW)){
-    
-  }
-}
+# #extract mean altitude of buffered uncertainty radius (note: extract v slow, try overnight/try rewriting function)
+anolis <- subset(anolis,!is.na(lat))
+pt <- data.frame(anolis$long,anolis$lat) %>%
+        SpatialPoints(proj4string=crs(alt)) %>%
+          spTransform("+proj=utm +zone=19 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
+poly <- gBuffer(pt,byid=T,width=anolis$uncertainty) %>% spTransform(crs(alt))
+poly.alts <- extract(alt,poly)
+mean.alt <- unlist(lapply(poly.alts,function(e) mean(na.omit(e))))
+anolis$pt.alt <- mean.alt
+  
+# use verbatim elevation where available
+anolis$pt.alt[!is.na(anolis$elevation)] <- anolis$elevation[!is.na(anolis$elevation)]
 
+#add age classes
+anolis$ageClass[anolis$year>1935 & anolis$year<=1951] <- 1
+anolis$ageClass[anolis$year>1951 & anolis$year<=1977] <- 2
+anolis$ageClass[anolis$year>1977 & anolis$year<=1990] <- 3
+anolis$ageClass[anolis$year>1990] <- 4
 
-bufferedPts <- for(i in 1:nrow(coords)){
-  row <- coords[i,]
-  pt <- SpatialPoints(data.frame(row$decimalLongitude,row$decimalLatitude),proj4string=crs(alt))
-  if(grepl("GPS|gps",row$georeferenceSources) | row$year > 1995){                                #extract elevation if pt is GPS
-    coords[i,]$elevation <- extract(alt,pt)
-  } else if (is.na(row$elevation) & !is.na(row$coordinateUncertaintyInMeters)){                  #take mean elevation over uncertainty radius for georeferenced points
-    if(row$decimalLongitude < -66){
-      pt <- spTransform(pt,crs("+proj=utm +zone=19 +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs"))
-    } else if(row$decimalLongitude > -66){
-      pt <- spTransform(pt,crs("+proj=utm +zone=20 +north +ellps=WGS84 +datum=WGS84 +units=m +no_defs"))
-    }
-      bufpt <- buffer(pt,row$coordinateUncertaintyInMeters)
-      coords[i,]$elevation <- spTransform(bufpt,crs(alt)) %>% extract(alt,.) %>% unlist() %>% mean()
-  }
-}
-
-coords.pts <- SpatialPointsDataFrame(data.frame(coords$decimalLongitude,coords$decimalLatitude),
-                                     data=data.frame(coords$year,coords$month,coords$timebin,coords$species))
-
-#extract altitudes & recombine with full dataset
-
-
-coords.elevation <- extract(alt,anolis.pts) 
-
-anolis$elevation[anolis$hascoords=="coordinates"] <- anolis.alt
-
-
-
-
-
-
-
-
+#final data filters
+anolis <- subset(anolis,uncertainty <= 1000)
+good.species <- ddply(anolis,.(species,timebin),summarize,n=length(day)) %>% subset(.,n>300) %>% .$species
+anolis <- subset(anolis,species %in% good.species)
+write.table(anolis,"./data/anolis_data.csv",sep=",")
