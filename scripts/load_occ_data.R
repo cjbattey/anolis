@@ -1,27 +1,41 @@
 #load, filter, and georeference occurrence records
 setwd("~/Dropbox/anolis/")
 library(data.table);library(raster);library(ggplot2);library(plyr);library(foreach);library(stringr);library(magrittr);library(dismo);library(rgeos)
+
+################################# NOTE: DO NOT OPEN TABLES WITH EXCEL ##############################
+
+#############################################################
+################# Read in GBIF + Museum Data ################
+#############################################################
+#projections and extents for maps
 ext.pr <- extent(-67.6,-65.2,17.8,18.7)
 ext.yunque <- extent(825000,850000,2015000,2040000)
+proj4.wgs <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+proj4.utm <- "+proj=utm +zone=19 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
 
-#remove embedded nulls in GBIF output (UTF-16?)
+#load elevation rasters
+alt <- raster("~/Dropbox/anolis/data/alt_30s_bil/alt.bil") %>% crop(ext.pr) %>% 
+  projectRaster(.,projectExtent(.,proj4.utm))
+alt1s<- raster("~/Dropbox/anolis/data/elevation/PuertoRico_altitude_1sec_USGSNED2013.tif") %>% crop(ext.pr) %>% 
+  projectRaster(.,projectExtent(.,proj4.utm))
+
+#remove embedded nulls (accented character issues...), read in data
 file <- "./data/locs/gbif_PRanolis/occurrence.txt"
 tt <- tempfile()  
 system(paste0("tr < ", file, " -d '\\000' >", tt))
 anolis <- data.frame(fread(tt))
 
-#anolis <- data.frame(fread("~/Dropbox/anolis/data/locs/gbif_PRanolis/occurrence_xl.txt",encoding="Latin-1")) 
+#pull useful columns from GBIF
 anolis <- anolis[names(anolis) %in% c("gbifID","institutionCode","basisOfRecord","catalogNumber","recordedBy",
-                                      "eventDate","verbatimEventDate","year","month","day","countryCode","stateProvince","county","municipality","locality",
-                                      "verbatimLocality","verbatimElevation","locationRemarks","decimalLatitude","decimalLongitude",
-                                      "coordinateUncertaintyInMeters","georeferenceProtocol","georeferenceSources",
-                                      "georeferenceRemarks","species","infraspecificEpithet","elevation")]
+                                      "eventDate","verbatimEventDate","year","month","day","countryCode",
+                                      "stateProvince","county","municipality","locality",
+                                      "verbatimLocality","verbatimElevation","locationRemarks","decimalLatitude",
+                                      "decimalLongitude","coordinateUncertaintyInMeters","georeferenceProtocol",
+                                      "georeferenceSources","georeferenceRemarks","species","infraspecificEpithet","elevation")]
 anolis <- subset(anolis,basisOfRecord=="PRESERVED_SPECIMEN" & species != "") 
-
-### Dealing with museums that suppress locality or date on GBIF 
 anolis <- subset(anolis,locality != "")
 
-#FMNH
+#merge FMNH full localities
 fmnh.mus <- read.csv("~/Dropbox/anolis/data/locs/fmnh_anolis.csv")
 names(fmnh.mus) <- c("catalogNumber","collectionNumber","Taxon","verbatimLocality","Details","verbatimEventDate","Details2",
                      "recordedBy","IDnotes","specimen.loc","habitatNotes","sex")
@@ -32,16 +46,16 @@ fmnh.gbif$locality <- fmnh.merge$verbatimLocality.y
 fmnh.gbif$verbatimEventDate <- fmnh.merge$verbatimEventDate.y
 anolis <- rbind(anolis,fmnh.gbif)
 
+#Remove other missing/withheld/duplicate institutions (note ROM is a duplicate institution ID in GBIF)
 anolis <- subset(anolis,institutionCode %in% c("AMNH","Royal Ontario Museum: ROM")==F)
 
-#LSU, UMMZ also suppress most data
+#Still need to incorporate AMNH, UMMZ, LSU (?)
 
 #######################################################################
 ##################### Missing/Ambiguous Dates #########################
 #######################################################################
 baddates <- subset(anolis,is.na(year))                                          # split out reports missing a year
 anolis <- subset(anolis,!is.na(year))
-
 baddates$verbatimEventDate[grep("no",baddates$verbatimEventDate)] <- NA         # if no date was recorded, standardize to NA
 baddates$verbatimEventDate[which(baddates$verbatimEventDate == "")] <- NA 
 
@@ -54,7 +68,7 @@ for(i in 1:nrow(baddates)){                                                     
     stop <- na.omit(y[,2])
     baddates$year[i] <- substr(e$verbatimEventDate,start,stop) %>% as.numeric()
   } else if(length(unlist(strsplit(e$verbatimEventDate,"/|-"))) == 3) {         # if the date splits in 3 on / or -, take the last element and add 19/20 as appropriate
-    yrend <- unlist(strsplit(e$verbatimEventDate,c("/|-")))[3]
+    yrend <- unlist(strsplit(e$verbatimEventDate,c("/|-")))[3]                  # helpfully, there are no reports in ambiguous formats ending in 0-16
     if(as.numeric(yrend) > 16){ 
       yr <- as.numeric(paste("19",yrend,sep=""))
       baddates$year[i] <- yr
@@ -67,16 +81,10 @@ for(i in 1:nrow(baddates)){                                                     
 baddates <- subset(baddates,!is.na(year))
 anolis <- rbind(anolis,baddates)                                                 # recombine reports
 
-# Add binary columns for easy binning
-anolis$timebin <- factor(anolis$year < 1980)
-levels(anolis$timebin) <- c("1980-2015","1955-1980")
-anolis$timebin <- factor(anolis$timebin,levels=c("1955-1980","1980-2015"))
-anolis$eventID <- paste(anolis$institutionCode,anolis$locality,anolis$year,sep=",")
-
 ##################################################################
 ################ Adding Verbatim Elevations ######################
 ##################################################################
-#for specimens with "VERBATIM ELEVATION:" in the verbatim locality, convert to meters and copy to elevation column
+#for MCZ specimens with "VERBATIM ELEVATION:" in the verbatim locality, convert as needed and copy to elevation column
 for(i in 1:nrow(anolis)){  
   row <- anolis[i,]
   if(grepl("ELEVATION",row$locality)){                                            # if ELEVATION in locality, copy text after ":"
@@ -102,65 +110,74 @@ for(i in 1:nrow(anolis)){
 }
 
 #############################################################
-########### georeferencing text localities ##################
+################ georeferencing + altitude ##################
 #############################################################
-#write locality table to file for manual georeferencing
-# georef <- subset(anolis,grepl("gps|GPS",anolis$locality) | !(year>=2000 & hascoords=="coordinates"))
-# localities <- ddply(georef,.(locality,verbatimLocality,institutionCode,recordedBy,year,georeferenceSources,decimalLatitude,
-#                              decimalLongitude,coordinateUncertaintyInMeters,elevation),summarize,n=length(day))
-# loc <- ddply(anolis,.(locality,eventID),summarize,n=length(gbifID))
-# write.csv(loc,"anolis_localities.csv",row.names = F,fileEncoding = "UTF-8")
+#warning: potentially disastrous merge issues caused by special characters in verbatimLocality and recordedBy fields. 
+#add event ID for merge/split 
+anolis$eventID <- paste(anolis$institutionCode,anolis$locality,anolis$year,sep=",")
 
-#add georeferenced coordinates. use gbif coords if collected by gps.
-#note: looks like some likely gps coords have NA sources on gbif.
-localities <- data.frame(fread("~/Dropbox/anolis/data/locs/anolis_localities_21Jul16.csv",encoding="UTF-8"))
-anolis <- join(anolis,localities,by=c("locality","eventID"),type="left",match="first")
-anolis$lat[anolis$year>1997 & !is.na(anolis$decimalLatitude)] <- anolis$decimalLatitude[anolis$year>1997 & !is.na(anolis$decimalLatitude)]
-anolis$long[anolis$year>1997 & !is.na(anolis$decimalLatitude)] <- anolis$decimalLongitude[anolis$year>1997 & !is.na(anolis$decimalLatitude)]
-anolis$uncertainty[anolis$year>1997 & !is.na(anolis$decimalLatitude)] <- 30
+#ddply summary for manual georeferencing
+#loc <- ddply(anolis,.(locality,year,eventID,recordedBy,georeferenceSources,decimalLatitude,decimalLongitude,verbatimLocality),summarize,n=length(gbifID))
+#write.csv(loc,"anolis_localities_27sept2016.csv",row.names = F,fileEncoding = "UTF-8")
 
-##############################################################
-############### extract coordinate elevations ################
-##############################################################
-####read in and merge altitude rasters (1-arc-sec = ~30M)
-# setwd("~/Dropbox/anolis/data/elevation/")
-# folders <- list.files()
-# elev <- lapply(folders,FUN=function(i){
-#   files <- list.files(paste0("./",i)) 
-#   imageFile <- files[grep(".img",files)]
-#   raster(paste0("./",i,"/",imageFile))
-# })
-# alt <- merge(elev[1][[1]],elev[2][[1]],elev[3][[1]],elev[4][[1]],elev[5][[1]],elev[6][[1]],elev[7][[1]],elev[8][[1]])
-# writeRaster(alt,"PuertoRico_altitude_1sec_USGSNED2013.tif")
+#load georeferenced coordinates, use GPS where available
+localities <- read.csv("~/Dropbox/anolis/anolis_localities_30sept2016.csv",stringsAsFactors = F) %>% subset(!is.na(lat))
+localities$long[grepl("GPS|gps",localities$georeferenceSources)] <- localities$decimalLongitude[grepl("GPS|gps",localities$georeferenceSources)]
+localities$lat[grepl("GPS|gps",localities$georeferenceSources)] <- localities$decimalLatitude[grepl("GPS|gps",localities$georeferenceSources)]
+localities$uncertainty[grepl("GPS|gps",localities$georeferenceSources)] <- 30
 
-#load merged 1" altitudes, extract from coordinates
-alt <- raster("~/Dropbox/anolis/data/alt_30s_bil/alt.bil") %>% crop(ext.pr)
-alt1s<- raster("~/Dropbox/anolis/data/elevation/PuertoRico_altitude_1sec_USGSNED2013.tif") %>% crop(ext.pr)
+#get average elevation across uncertainty radius (21 warnings for Mona Island pts w NA elevations)
+localities$alt <- data.frame(localities$long,localities$lat) %>%
+                    SpatialPoints(proj4string=crs(proj4.wgs)) %>%
+                      spTransform(proj4.utm) %>%
+                        gBuffer(byid=T,width=localities$uncertainty) %>% 
+                          extract(alt1s,.) %>%
+                            lapply(.,function(e) mean(na.omit(e))) %>%
+                              unlist()
 
-#extract point localities
-#anolis$pt.alt[!is.na(anolis$lat)] <- extract(alt,SpatialPoints(data.frame(anolis$long[!is.na(anolis$lat)],anolis$lat[!is.na(anolis$lat)]))) 
+#point elevation for comparison
+localities$pt.alt <- data.frame(localities$long,localities$lat) %>%
+                      SpatialPoints(proj4string=crs(proj4.wgs)) %>%
+                        spTransform(proj4.utm) %>%
+                          extract(alt1s,.)
 
-# #extract mean altitude of buffered uncertainty radius (note: extract v slow, try overnight/try rewriting function)
-anolis <- subset(anolis,!is.na(lat))
-pt <- data.frame(anolis$long,anolis$lat) %>%
-        SpatialPoints(proj4string=crs(alt)) %>%
-          spTransform("+proj=utm +zone=19 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs")
-poly <- gBuffer(pt,byid=T,width=anolis$uncertainty) %>% spTransform(crs(alt))
-poly.alts <- extract(alt,poly)
-mean.alt <- unlist(lapply(poly.alts,function(e) mean(na.omit(e))))
-anolis$pt.alt <- mean.alt
-  
-# use verbatim elevation where available
+anolis <- merge(anolis,localities,all.x=T,all.y=T)
+#localities$verbatimLocality <- gsub("\"\"\"\"","\"\"",localities$verbatimLocality) #double qmarks were preventing join...
+#t <- join(anolis,localities,by=c("eventID","verbatimLocality"),match="first") #don't join by other vars - encoding issues...
+
+# use GPS or verbatim elevation where available
+# anolis$lat[grepl("GPS|gps",anolis$georeferenceSources)] <- anolis$decimalLatitude[grepl("GPS|gps",anolis$georeferenceSources)]
+# anolis$long[grepl("GPS|gps",anolis$georeferenceSources)] <- anolis$decimalLongitude[grepl("GPS|gps",anolis$georeferenceSources)]
+# anolis$uncertainty[grepl("GPS|gps",anolis$georeferenceSources) & !is.na(anolis$decimalLatitude)] <- 30
+anolis$alt[!is.na(anolis$elevation)] <- anolis$elevation[!is.na(anolis$elevation)]
 anolis$pt.alt[!is.na(anolis$elevation)] <- anolis$elevation[!is.na(anolis$elevation)]
 
+#get distance between GBIF and UW georeferencing
+anolis$georefDistance <- NA
+for(i in 1:nrow(anolis)){
+  row <- anolis[i,]
+  if(!is.na(row$decimalLatitude) & !is.na(row$lat)){
+    gbif <- SpatialPoints(data.frame(row$decimalLongitude,row$decimalLatitude),proj4string=crs(proj4.wgs))
+    uw <- SpatialPoints(data.frame(row$long,row$lat),proj4string=crs(proj4.wgs))
+    anolis$georefDistance[i] <- spDistsN1(gbif,uw,longlat=T)
+  }
+}
+
 #add age classes
+anolis$ageClass[anolis$year<=1935] <- 0
 anolis$ageClass[anolis$year>1935 & anolis$year<=1951] <- 1
 anolis$ageClass[anolis$year>1951 & anolis$year<=1977] <- 2
 anolis$ageClass[anolis$year>1977 & anolis$year<=1990] <- 3
 anolis$ageClass[anolis$year>1990] <- 4
 
+#binary columns for easy binning
+anolis$timebin <- factor(anolis$year < 1980)
+levels(anolis$timebin) <- c("1980-2015","1955-1979")
+anolis$timebin <- factor(anolis$timebin,levels=c("1955-1979","1980-2015"))
+
 #final data filters
-anolis <- subset(anolis,uncertainty <= 1000)
-good.species <- ddply(anolis,.(species,timebin),summarize,n=length(day)) %>% subset(.,n>300) %>% .$species
+anolis.full <- anolis
+anolis <- subset(anolis,(uncertainty <= 2000) | (is.na(uncertainty) & !is.na(elevation)))
+good.species <- ddply(anolis,.(species,timebin),summarize,n=length(day)) %>% subset(.,n>200) %>% .$species
 anolis <- subset(anolis,species %in% good.species)
 write.table(anolis,"./data/anolis_data.csv",sep=",")

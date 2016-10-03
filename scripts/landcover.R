@@ -41,67 +41,55 @@ plot(age3==1,main="1978-1990",axes=F,legend=F)+plot(coasts,lwd=.5,add=T)
 plot(age4==1,main="1991-2000",axes=F,legend=F)+plot(coasts,lwd=.5,add=T)
 par(mfrow=c(1,1))
 
+coords <- subset(anolis,!is.na(lat))
 #3. get % reports in forested habitats for each sp. 
-anolis.coords <- subset(anolis.full,!is.na(lat))
-gundlachi.age2 <- subset(anolis,ageClass %in% c(2) & species=="Anolis gundlachi")
-pts2 <- SpatialPoints(data.frame(gundlachi.age2$long,gundlachi.age2$lat),proj4string = crs(alt)) %>% spTransform(.,crs(lc))
-gundlachi.age4 <- subset(anolis,ageClass %in% c(4) & species=="Anolis gundlachi")
-pts4 <- SpatialPoints(data.frame(gundlachi.age4$long,gundlachi.age4$lat),proj4string = crs(alt)) %>% spTransform(.,crs(lc))
-bgpts2 <- SpatialPoints(data.frame(anolis$long[anolis$ageClass %in% c(2)],anolis$lat[anolis$ageClass %in% c(2)]),proj4string = crs(alt)) %>% spTransform(.,crs(lc))
-bgpts4 <- SpatialPoints(data.frame(anolis$long[anolis$ageClass %in% c(4)],anolis$lat[anolis$ageClass %in% c(4)]),proj4string = crs(alt)) %>% spTransform(.,crs(lc))
+gundlachi.age2 <- subset(coords,ageClass %in% c(2) & species=="Anolis gundlachi")
+pts2 <- SpatialPoints(data.frame(gundlachi.age2$long,gundlachi.age2$lat),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
+gundlachi.age4 <- subset(coords,ageClass %in% c(4) & species=="Anolis gundlachi")
+pts4 <- SpatialPoints(data.frame(gundlachi.age4$long,gundlachi.age4$lat),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
+bgpts2 <- SpatialPoints(data.frame(coords$long[coords$ageClass %in% c(2)],coords$lat[coords$ageClass %in% c(2)]),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
+bgpts4 <- SpatialPoints(data.frame(coords$long[coords$ageClass %in% c(4)],coords$lat[coords$ageClass %in% c(4)]),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
 par(mfrow=c(2,1),oma = c(1,1,0,0) + 0.1,mar = c(2,2,2,2) + 0.1)
 plot(age2,main="A. gundlachi, 1960-1977",axes=F,legend=F)+plot(coasts,add=T)+points(bgpts2,cex=.7)+points(pts2,cex=.2,col="red")
 plot(age4,main="A. gundlachi, 1990-2015",axes=F,legend=F)+plot(coasts,add=T)+points(bgpts4,cex=.7)+points(pts4,cex=.2,col="red")
 par(mfrow=c(1,1))
 
-#crop for El Yunque NF xlim=c(-66,-65.6),ylim=c(18.2,18.5)
-alt.yunque <- crop(projectRaster(from=alt1s,lc),c(825000,850000,2015000,2040000))
-yunque.roads <- roads[roads@data$FULLNAME %in% c("Pr- 186","Pr- 191"),]
 
-#pr186 and pr191 elevation profiles
-pr186 <- roads[roads@data$FULLNAME %in% c("Pr- 186"),] %>% spTransform(.,crs(lc))
-pr186.buffer <- buffer(pr186,width=1000)
-pr186.r <- rasterize(pr186,lc) 
+#get %forested habitat within uncertainty radius for all reports, subset by species
+#note: this is unusably slow :( rewrite to run on localities
+#double note: localities much faster, but now getting some values > 1, which is a problem...
+locs <- ddply(anolis,.(eventID,lat,long,uncertainty,ageClass,species),summarize,n=length(day))
+pc.forest <- ddply(locs,.(species,ageClass),function(i){
+  pts <- SpatialPointsDataFrame(coords=i[,c("long","lat")],
+                                data=data.frame(i$uncertainty),
+                                proj4string=crs(proj4.wgs)) %>% spTransform(proj4.utm)
+  buf <- gBuffer(pts,width=pts@data$i.uncertainty,byid=T)
+  if(i$ageClass[1] == 2){
+    df <- extract(age2,buf) 
+  } else if (i$ageClass[1] ==4){
+    df <- extract(age4,buf)
+  }   
+  df <- lapply(df,function(e) mean(na.omit(e))) %>% unlist() %>% data.frame()
+  df$species <- i$species[1]
+  df$ageClass <- i$ageClass[1]
+  colnames(df) <- "percent.forested"
+  df
+  })
 
-pr191 <- roads[roads@data$FULLNAME %in% c("Pr- 191"),] %>% spTransform(.,crs(lc))
-pr191.buffer <- buffer(pr191,width=1000)
-pr191.r <- rasterize(pr191,lc) 
+
+#rasterize species distributions at 1km
+
+gund <- subset(anolis,species=="Anolis gundlachi")
+pts <- SpatialPoints(gund[,c("long","lat")],proj4string=crs(proj4.wgs)) %>% spTransform(proj4.utm)
+r <- rasterize(pts,alt,fun="count")
+
+effort <- SpatialPoints(anolis[,c("long","lat")],proj4string=crs(proj4.wgs)) %>% 
+            spTransform(proj4.utm) %>% 
+              rasterize(alt,fun="count")
   
-pr3 <- roads[roads@data$FULLNAME %in% c("Pr- 3"),] %>% spTransform(.,crs(lc))
 
-pts2.r <- rasterize(pts2,)
-
-pr191.alt <- extract(alt.yunque,pr191)
-
-
-#plot 186 & 191 localities
-plot(crop(age2,c(825000,850000,2015000,2040000)))
-  plot(rasterToContour(alt.yunque),add=T,col="grey",lwd=.5)
-  plot(pr191,add=T)+plot(pr186,add=T)+
-  points(pts4,col="red")
-  points(pts2,col="blue")
-  
-pr186.alt <- extract(althires,pr186.pts) %>% unlist() %>% data.frame(alt=.,order=1:length(.))
-
-ggplot()+geom_line(data=pr186.alt,aes(x=order,y=alt))+
-  geom_point(data=subset(anolis,species=="Anolis gundlachi"),aes(x=))
-
-plot(alt2)+plot(yunque.roads,add=T)+points(bgpts2)+points(pts2,col="red",cex=0.2)
-plot(alt2)+plot(yunque.roads,add=T)+points(bgpts4)+points(pts4,col="red",cex=0.2)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+#get species composition for every locality
+#1. 
 
 
 

@@ -1,39 +1,62 @@
 ---
-title: 'Anolis Elevation Shifts: Prelim Summary'
-author: "CJ Battey"
+title: "Specimen Records Document Recent Elevational Range Shifts in Puerto Rican *Anolis*"
+author: "CJ Battey, Ray Huey, (?)"
 date: "May 20, 2016"
 output: pdf_document
 ---
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = T)
+knitr::opts_chunk$set(echo = F)
 knitr::opts_chunk$set(tidy = T)
+library(data.table);library(raster);library(ggplot2);library(plyr);library(foreach);library(stringr);library(magrittr);library(dismo);library(rgeos)
+ext.pr <- extent(-67.6,-65.2,17.8,18.7)
+ext.yunque <- extent(825000,850000,2015000,2040000)
+proj4.wgs <- "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs"
+proj4.utm <- "+proj=utm +zone=19 +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs"
+
+#load elevation rasters
+alt <- raster("~/Dropbox/anolis/data/alt_30s_bil/alt.bil") %>% crop(ext.pr) %>% 
+  projectRaster(.,projectExtent(.,proj4.utm))
+alt1s<- raster("~/Dropbox/anolis/data/elevation/PuertoRico_altitude_1sec_USGSNED2013.tif") %>% crop(ext.pr) %>% 
+  projectRaster(.,projectExtent(.,proj4.utm))
 ```
-Background: 
+#Introduction (draft) 
 Tropical montane species are thought to be particularly vulnerable to extinction under climate change because they occupy relatively narrow thermal niches and have a finite amount of higher-elevation habitat to occupy in the future. Simple models relating species' ranges to climatic conditions assume that as air temperatures increase, montane species will move uphill to track a thermal niche. However, physiological studies have found that body temperatures in many ectotherms are regulated via fine-scale habitat selection and microclimatic variation between (for example) forested and open habitats. Changes in average temperatures over time or along an altitudinal transect may thus be secondary to local variation in microclimate caused by shifts in land-use or habitat structure when predicting shifts in species' distributions. 
 
-Reforestation of former agricultural lands in Puerto Rico over the course of the 20th century offers an opportunity to compare the impacts of changes in air temperatures and land use in driving shifts in species' ranges. Lizards in the genus *Anolis* are a model system in the fields of ecomorphology, island biogeography, and thermal physiology, and have been studied intensively in Puerto Rico since at least the 1960's. *A. gundlachi* is a forest specialist historically considered a montane species, while *A. cristatellus* is a habitat generalist found primarily at low elevations. Anecdotal reports suggest that *gundlachi* is now thriving at low-elevation sites that were inhabited only by *cristatellus* during the early 1970's, but no published study has assessed shifts in *Anolis* elevational range quantitatively. 
+Reforestation of former agricultural lands in Puerto Rico over the course of the 20th century offers an opportunity to compare the impacts of changes in air temperatures and land use in driving shifts in species' ranges. Lizards in the genus *Anolis* are a model system in the fields of ecomorphology, island biogeography, and thermal physiology, and have been studied intensively in Puerto Rico since the early 20th century. *A. gundlachi* is a forest specialist historically considered a montane species, while *A. cristatellus* is a habitat generalist found primarily in open areas at low elevations. Anecdotal reports suggest that *gundlachi* is now thriving at low-elevation sites that were inhabited only by *cristatellus* during the early 1970's, but no published study has assessed shifts in *Anolis* elevational range quantitatively. 
 
-We used aggregated specimen records from natural history museums to assess changes in the distributions of these species in Puerto Rico during the twentieth century. Specifically, we ask:  
+We used aggregated specimen records from natural history museums to assess changes in the distributions of these species in Puerto Rico during the twentieth century. Specifically, we ask: (1) Has *A. gundlachi* expanded to lower elevations since the 1970's? and (2) are range shifts in *A. gundlachi* (if any) better explained by changes in climate or landcover?  
 
-1. Has *A. gundlachi* expanded to lower elevations since the 1970's?  
-2. Are range shifts in *A. gundlachi* (if any) better explained by changes in climate or landcover?  
-
-
+#Methods
 #*Anolis* Occurrence Data
 ####Species Occurrence Points
-We downloaded all records of natural history specimens in the genus *Anolis* collected in Puerto Rico from the Global Biodiversity Information Facility (GBIF). Because GBIF incorporates data from many partner institutions, missing data caused by inconsistent formatting is a persistent problem. In addition, many specimens either lack georeferenced locality information, or were perviously georeferenced with paper atlases at relatively low precision. We developed a set of scripts to automate cleaning of GBIF data via (1) parsing ambiguous date formats  and (2) add verbatim elevations when these were included in the text locality. We then manually georeferenced all localities with greater than ten specimen collections using the Google Maps API to measure road kilometers and Google Earth to locate point localities. We followed the vertNet.org best-practices for georeferencing and calculated uncertainty to the nearest 100M for all points. All localities were georeferenced by the same individual using the same protocol. We then filtered the dataset to exclude specimens with greater than 1km georeferencing uncertainty. 
+We downloaded all records of natural history specimens in the genus *Anolis* collected in Puerto Rico from the Global Biodiversity Information Facility (GBIF) and developed a set of scripts to (1) parse ambiguous date formats (2) add verbatim elevations when these were included in the text locality and (3) identify specimens with field-collected GPS coordinates. We then manually georeferenced all collection localities with greater than ten specimen collections using the Google Maps API to measure road kilometers and Google Earth to locate point localities. We followed the vertNet.org best-practices for georeferencing (CITE) and calculated uncertainty to the nearest 100M for all points. All localities were georeferenced by the same individual using the same protocol (supplement 1). 
+  
+After removing localities with greater than 2km georeferencing uncertainty and splitting out sites with verbatim elevations provided by the collector, we estimated the elevation of each collection as the mean elevation across the full uncertainty radius in the USGS National Elevation Database (2013) at 1-arc-second resolution, using the rgeos and Raster packages in R (CITE x3). Specimen records were binned into four age classes covering the period 1935-2015, based on the forest age ranges given in Helmer et al. (2008)'s analysis of landcover change on Puerto Rico (see below). We subset records to include only species with greater than 200 specimen records before and after 1980 for downstream analyses. 
 
-The cleaned dataset includes 7,770 reports across 6 species. Most collection records occurred in two periods: 1970-1980, and 2000-2010. 
-The largest collections included in the final dataset are from the MCZ and MVZ. Additional records from AMNH have yet to be added to the dataset. KU has a large collected with diverse sampling localities, but the written localities are not specific enough to allow georeferencing at or below 1km uncertainty. 
+[ Georeferencing supplement: Although roughly two-thirds of the GBIF records included georeferenced coordinates submitted by natural history museums, we found several clear errors in these data and noted that many cited paper maps, resulting in relatively poor resolution (particularly in the case of road kilometer measurements). To locate each specimen at the finest level possible given existing data, we extracted unique text locality descriptions for all collecting localities (n=1,115) and manually georeferenced sites lacking field-collected GPS coordinates and with greater than five specimen records using Google Earth and Google Maps, following the protocol described in the vertNet.org specimen georeferencing guide. 
+ 
+Briefly, point localities were located through text searches for named places, with an uncertainty radius covering the approximate area of the named place. Coordinates of localities given in road kilometers were assigned by using the Google Maps directions tool to measure road distances from the relevant intersection, with uncertainty corresponding to the significant figures in the text. For localities given in a direction-and-distance format without a road or place name, we calculated road miles when a single clear route existed (e.g. PR 191 south of Palmer) and air miles when multiple road routes were possible, or when the same collector had previously explicitly noted a locality in air miles. Uncertainty for air mile localities was conservatively set to half the distance from the given place name (i.e. start of measurement). ]
+ 
+####Shifts in Elevation Distribution
+  We found the absolute elevation ranges of each species in each age class, then used a Wilcoxon rank sum test (CITE) to assess whether the elevation distribution of specimen collections had shifted between the periods 1952-1977 and 1991-2015. Similar statistical methodologies have been employed in studies of elevation range shifts in [3-4 examples here]. Because shifts in the elevational distribution of collecting effort could bias results, we also applied a Wilcox test to compare the elevation distribution of collections of all species of *Anolis* between time periods. 
+   
+To assess changes in species composition at low elevations specifically, we extracted specimen reports with elevations lower than 250M, split by species, and used a McNemar test (CITE) to compare the relative abundance of each species across time periods (i.e. the number of specimens of species *i* relative to the number of all *Anolis* specimens in each period). This procedure is conceptually similar to the specimen-derived abundance index proposed in Rohwer et al. (Cite YR, Linck et al. 2016, Grayson et al. YR), in which the observed abundance of a target species is corrected for survey effort by dividing by the number of specimens collected with similar techniques in a given area. 
+   
+Finally, we identified areas which had been surveyed in multiple time periods by calculating pairwise geographic distances among all collecting localities and using a complete-linkage heirarchical clustering algorithm (hclust(method="complete") in R) to identify groups of localities within approximately 1 kilometer of each other. We then merged reports in these locality groups and retained only groups with at least 100 specimen collections each in the periods 1955-1977 and 1991-2015. We then calculated the relative abundance of each species in each locality group and time period, and used a McNemar test to ask if the proportions of each species changed significantly between time periods. 
+ 
+####Landcover
+  To assess changes in forest cover, we used a forest age raster layer developed via analysis of historic aerial and satellite imagery (Helmer et al. 2008). We merged forest ages across soil types and subset the original Helmer raster layer to produce maps of forested areas of Puerto Rico at 30M resolution in four time bins: 1935-1951, 1952-1977, 1977-1990, and 1991-2000. All areas were considered to be nonforested prior to the maximum age of forests in the Helmer dataset. Although some areas of young forest may represent succesional change of previously forested habitats after large natural disturbances (e.g. hurricanes), previous analyses have found that roughly X% (? check Helmer citations) of forest regeneration in Puerto Rico represents conversion of commodity agricultural lands to natural habitats (Helmer et al. 2008, Helmer et al 2002, Grau et al. 2003). 
+  
+All analyses GIS and statistical analyses were conducted in R. An alternate version of this manuscript formatted as an RMarkDown document with embedded code including all data processing and analysis is available in the online supplement. 
 
-\newpage
+#Results
+####Specimen Database
+The final dataset includes 9,680 specimens across 6 species: *A. cristatellus*, *A. gundlachi*, *A. krugi*, *A. evermanni*, and *A. pulchellus*. Most collecting occurred during the periods 1952-1977 or 1991-2016 (Figure 1). The largest collections included in the final dataset are from the Museum of Comparative Zoology at Harvard University and the Museum of Vertebrate Zoology at UC Berkeley. For specimens with georeferenced coordinates, the median distance between the GBIF coordinates and our georeferenced location was 0.5 kilometers and the mean was 3.5 kilometers; suggesting that most georeferencing error occured in a relatively small proportion of specimens. 
+
 ```{r message=F,fig.height=4,warning=F}
 setwd("/R/anolis/")
-anolis <- read.csv("~/Dropbox/anolis/data/anolis_data.csv")
+anolis <- read.csv("~/Dropbox/anolis/data/anolis_data.csv") %>% subset(!is.na(alt))
 ```
-
-Fig 1. Georeferenced *Anolis* specimen localities. Base layer is elevation.
-
 
 ```{r fig.height=2.5}
 #distribution of collections across museums
@@ -43,54 +66,87 @@ ggplot(data=museums,aes(x=substr(institutionCode,1,4),y=Reports,fill=timebin))+t
 ```
 
 ```{r fig.height=2.5}
-years <- ddply(subset(anolis,year>1960),.(year,species),summarize,Reports=length(pt.alt))
+years <- ddply(subset(anolis,year>1960),.(year,species),summarize,Reports=length(alt))
 ggplot(data=years,aes(x=year,y=Reports,fill=species))+theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   geom_bar(stat="identity")+ylab("Specimens")+xlab("")
 ```
 
 Fig 2-3. Specimen source and time summaries.  
 
-#Preliminary Elevation Analysis
-Looking at the raw data without correcting for differences in survey effort, all species show significant shifts in mean elevation. Three species (evermanni, krugi, and gundlachi) declined in elevation
+####Elevation Ranges
+The elevation distributions of all six common *Anolis* species shifted significantly between the periods 1955-1977 and 1991-2015 (table 1). In general, highland species moved downhill while low-elevation species moved uphill, though the magnitude of change was highly variable across species. *A. gundlachi* experienced the largest shift, with a mean elevation of 524M from 1955-1977 dropping to 400M from 1991-2015. *A. gundlachi* also experienced the largest drop in lower elevation limit, from 220 to 98 meters. The largest increase in maximum elevation occurred in *A. cristatellus*, which was collected at sites up to 700 Meters in the mid 20th century, and up to 912 Meters after 1991. Manual checks of these putatively range-expanded localities in both species find that they are not the result georeferencing errors or bias associated with averaging elevations across the uncertainty radius, as multiple specimens were located with field GPS coordinates and prior maximum and minimum elevations were from verbatim (rather than georeference-derived) data. 
 
-```{r }
-ddply(anolis,.(species),function (i){
-  t <- t.test(i$pt.alt~i$timebin)
-  p <- round(t$p.value,5)
-  means <- round(t$estimate,digits=2)
-  diff <- round(t$conf.int,digits=2)
-  sum <- c(pre=means[1],post=means[2],diff=means[2]-means[1],ci=paste(round(diff[1],2),"-",round(diff[2],2)),p=p)
-  names(sum) <- c("pre","post","difference","CI","p")
+In contrast, the elevation distribution of all *Anolis* collecting localities did not shift significantly between time periods when compared on either a per-locality (*p*=0.4105, 95% CI -12.47 to 25.64 meters) or per-specimen basis (*p*=0.0522, 95% CI -5.49 to 8.54 meters). Although the per-specimen basis is nearly significant at the conventional alpha value of 0.05, confidence intervals suggest that any shift in collecting effort was positive (that is, relatively more high-elevation specimens in recent collections), which would not explain the large drops in mean elevation of montane species. 
+
+```{r fig.width=2,fig.height=2.5}
+locs <- ddply(anolis,.(locality,long,lat,ageClass,alt),summarize,n=length(day)) %>% subset(ageClass %in% c(2,4))
+ggplot(data=locs,aes(alt))+facet_wrap(~ageClass)+
+  geom_density()+
+  ggtitle("Anolis specimen elevation\n per locality")
+```
+```{r fig.width=2,fig.height=2.5}
+a <- subset(anolis,ageClass %in% c(2,4))
+ggplot(data=a,aes(alt))+facet_wrap(~ageClass)+
+  geom_density()+
+  ggtitle("Anolis specimen elevation\n per specimen")
+
+wilcox.test(locs$alt ~ locs$ageClass,conf.int=T)
+wilcox.test(a$alt~a$ageClass,conf.int=T)
+```
+
+Figure X. Elevational distribution of all collecting effort, by age class. 
+
+```{r}
+ddply(anolis,.(species,ageClass),summarize,min=min(na.omit(alt)),max=max(na.omit(alt)),range=max-min) %>% 
+  subset(ageClass %in% c(2,4)) 
+```
+
+Table 1. Maximum and Minimum Elevation, by species and age class. 
+
+```{r}
+ddply(subset(anolis,ageClass %in% c(2,4)),.(species),function (i){
+  t <- wilcox.test(i$alt~i$ageClass,conf.int=T)
+  sum <- c(pre=mean(i$alt[i$ageClass==2]),
+           post=mean(i$alt[i$ageClass==4]),
+           diff=round(t$estimate,digits=2),
+           ci=t$conf.int,
+           p=round(t$p.value,8))
+  names(sum) <- c("pre","post","difference","CI_lower","CI_upper","p")
   sum
 })
 ```
 
-```{r warning=F, fig.height=3, message=F}
-ggplot(data=anolis,aes(x=timebin,y=pt.alt))+facet_grid(.~species)+theme_bw()+xlab("")+
+Table 2. Results of wilcox tests on elevation distributions, by species and age class. 
+
+```{r warning=F, fig.height=4, message=F,fig.width=6}
+ggplot(data=anolis,aes(x=timebin,y=alt))+facet_grid(.~species)+theme_bw()+xlab("")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1),strip.text.x=element_text(size=6))+
   ggtitle("Median Report Elevation, Pre vs. Post 1980")+
-  geom_point(size=.5,alpha=0.1,position="jitter",col="grey")+
+  geom_point(size=.2,alpha=0.4,col="grey",position="jitter")+
   geom_boxplot(notch=F,outlier.colour = NA,fill=NA)
-  
 ```
 
-Figure 4. Boxplot of time-binned specimen elevations. Center is median, box is 25th and 75th percentile, bars give max/min excluding outliers.  
+Figure 4. Boxplot of time-binned specimen elevations. Grey dots represent individual specimens. 
 
-```{r warning=F, fig.height=3, message=F}
-ggplot(data=subset(anolis,year>1960),aes(x=year,y=pt.alt))+facet_grid(.~species)+theme_bw()+
+```{r warning=F, fig.height=4,fig.width=6, message=F}
+ggplot(subset(anolis,ageClass %in% c(2,4)),aes(x=alt,fill=factor(ageClass)))+
   theme(axis.text.x = element_text(angle = 45, hjust = 1),strip.text.x=element_text(size=6))+
-  scale_x_continuous(breaks=c(1960,2000))+
-  geom_point(size=1,alpha=0.3)+
-  geom_smooth(method="lm")
+  facet_wrap(~species)+
+  scale_fill_discrete(name="Age Class")+
+  geom_density(alpha=0.5,adjust=1.5)
 ```
-Figure 5. Same data with time as a continuous variable.
+
+Supplementary Figure X. Elevation distributions by species and age class.
 \newpage
 
-##Survey Effort
-It seems likely that variation in survey effort is driving at least some of this pattern. For example, in *A. krugi* the large number of high-elevation reports collected at single localities during 1955-1980 pulls the "pre" average up to the approximate height of El Verde despite the presence of records all the way down to sea level in both periods. It's hard to know if those reports represent higher density of *krugi* at high altitudes, or higher survey effort. If we bin altitudes across all reports and split by time period, it looks like collecting effort has been more or less constant at low altitudes but has dropped substantially at high altitudes. Here's a summary across the six commonly collected species of *Anolis*:
+####Low-Elevation Species Composition
+(maybe cut this? Less necessary given no significant shift in overall distribution of specimen collections).
+
+Focusing only on specimens collected from sites below 250M, we find that the proportions of all species are independent in the midcentury and recent time periods (Table X). These results were highly significant using both a chi-squared and McNemar test. In the case of *A. gundlachi*, the species represented less than 1% of the 3226 specimens collected below 250M from 1952-1977, and 8.2% from 1991-2015 (Table X).
+
 
 ```{r fig.width=2,fig.height=2.5}
-anolis$altbin <- cut(anolis$pt.alt,seq(0,max(anolis$pt.alt),250),labels=c("0-250","250-500","500-750","750-1000"))
+anolis$altbin <- cut(anolis$alt,seq(0,max(anolis$alt),250),labels=c("0-250","250-500","500-750","750-1000"))
 anolis.altbin <- subset(anolis,is.na(altbin)==F)
 altsummary <- ddply(anolis.altbin,.(timebin,altbin,species),summarize,n=length(species))
 ggplot(data=altsummary,aes(x=timebin,y=n,fill=altbin))+geom_bar(stat="identity")+ylab("Specimens")+
@@ -102,31 +158,29 @@ ggplot(data=altsummary,aes(x=timebin,y=n,fill=altbin))+geom_bar(stat="identity")
   theme(axis.text.x = element_text(angle = 45, hjust = 1),strip.text.x = element_text(size = 6))
 ```
 
-One way to control some of the bias in survey effort is to restrict our analysis to elevations below 250M where the total number of specimens in both periods is fairly constant. Then we can ask: "has the relative abundance of gundlachi increased at low elevations between survey periods?" Using a chi-squared test across all species we get:  
+Figure 9. Number of collections by species and time period. 
 
 Chi-Squared Matrix|pre    |post
 ------------------|-------|-------
-*A. gundlachi*    |837    |458
-*Anolis sp*       |3754   |2775
+*A. gundlachi*    |6      |149
+*Anolis sp*       |3226   |1813
 
 ```{r tidy=T}
-low <- subset(anolis,pt.alt<=250)
-n.sp.pre <- nrow(subset(low,species=="Anolis gundlachi" & timebin=="1955-1980"))
-n.sp.post <- nrow(subset(low,species=="Anolis gundlachi" & timebin=="1980-2015"))
-n.all.pre <- nrow(subset(low,timebin=="1955-1980"))
-n.all.post <- nrow(subset(low,timebin=="1980-2015"))
+low <- subset(anolis,alt<=250)
+n.sp.pre <- nrow(subset(low,species=="Anolis gundlachi" & ageClass==2))
+n.sp.post <- nrow(subset(low,species=="Anolis gundlachi" & ageClass==4))
+n.all.pre <- nrow(subset(low,ageClass==2))
+n.all.post <- nrow(subset(low,ageClass==4))
 chimatrix <- matrix(c(n.sp.pre,n.sp.post,n.all.pre,n.all.post),byrow = T, nrow = 2)
 chisq.test(chimatrix)
 ```
-  
-The fraction of *A. gundlachi* collected below 500 meters has increased from around 9% in 1955-1980 to 20% in 1980-2016 (p<<0.01). This is the simplest version of what Siever Rohwer has called an "abundance index" in a few recent publications aimed at describing shifts in bird distributions in Mexico. If I loop the above analysis to compare across species, it looks like five of six show significant differences in relative abundance below 500 meters.  
 
 ```{r}
 anolischi2fun <- function(i){
-n.sp.pre <- nrow(subset(low,species==i & timebin=="1955-1980"))
-n.sp.post <- nrow(subset(low,species==i & timebin=="1980-2015"))
-n.all.pre <- nrow(subset(low,timebin=="1955-1980"))
-n.all.post <- nrow(subset(low,timebin=="1980-2015"))
+n.sp.pre <- nrow(subset(low,species==i & ageClass==2))
+n.sp.post <- nrow(subset(low,species==i & ageClass==4))
+n.all.pre <- nrow(subset(low,ageClass==2))
+n.all.post <- nrow(subset(low,ageClass==4))
 chimatrix <- matrix(c(n.sp.pre,n.sp.post,n.all.pre,n.all.post),byrow = T, nrow = 2)
 chi <- chisq.test(chimatrix)
 c(i,round(n.sp.pre/n.all.pre,3),round(n.sp.post/n.all.post,3),round(chi$p.value,5))
@@ -136,9 +190,240 @@ names(chi2table) <- c("Species","relAbund.pre","relAbund.post" ,"p")
 chi2table
 ```
 
-#Landcover
+Table X. Results of chi-squared tests on per-species specimen counts relative to all *Anolis* specimens from 1952-1977 and 1991-2015. 
+\newpage
+####Landcover
+```{r warning=F,message=F}
+setwd("~/Dropbox/anolis/")
+library(raster)
+#1. load landcover raster (Helmer et al. 2008, JGRBiogeoscience), reclassify to combine soil/forest types as needed
+roads <- shapefile("./data/roads/tl_2013_72_prisecroads/tl_2013_72_prisecroads.shp")
+lc <- raster("./data/landcover/prforestage_foresttype/IITF_JGR113_puertorico_fortype_age.img")
+m.all <- read.delim("./data/landcover/prforestage_foresttype/combineSoils_reclassMatrix.txt",header=F)
+m.forests <- read.delim("./data/landcover/prforestage_foresttype/PRlandcover_combSoils_allForest.txt",header=F)
+m.humidForests <- read.delim("./data/landcover/prforestage_foresttype/PRlandcover_combSoils_humidForest.txt",header=F)
+m.dryForests <- read.delim("./data/landcover/prforestage_foresttype/PRlandcover_combSoils_dryForest.txt",header=F)
+lc.all <- reclassify(lc,m.all)
+lc.forests <- reclassify(lc,m.forests)
+lc.humidForests <- reclassify(lc,m.humidForests)
+lc.dryForests <- reclassify(lc,m.dryForests)
+coasts <- shapefile("~/Documents/worldclim/ne_10m_coastline/ne_10m_coastline.shp") %>% crop(ext.pr) %>% spTransform(.,crs(lc))
+#writeRaster(lc,"./data/landcover/prforestage_foresttype/PRlandcover_combSoils.tif")
+#lc.all classfication key:
+# 0	Bare
+# 1	High Density Urban 1991
+# 2	New Urban and Bare 1991-2000
+# 3	Low Density Development 2000
+# 4	Pasture and Agriculture
+# 5	Forest Age 1-9yr
+# 6	Forest Age 10-22yr
+# 7	Forest Age 23-49yr
+# 8	Forest Age 50-64yr
+# 9 Emergent Wetland
+# 10  Coastal Sand/Rock
+# 11  Water
+
+#2. reclassify by age to produce rasters for <1958, 1959-1985,1986-1998,1999-2007 ("age1"-"age4")
+age1 <- reclassify(lc.all,as.matrix(data.frame(from=c(0:11),to=c(0,0,0,0,0,0,0,0,1,0,0,0))))
+age2 <- reclassify(lc.all,as.matrix(data.frame(from=c(0:11),to=c(0,0,0,0,0,0,0,1,1,0,0,0)))) 
+age3 <- reclassify(lc.all,as.matrix(data.frame(from=c(0:11),to=c(0,0,0,0,0,0,1,1,1,0,0,0))))
+age4 <- reclassify(lc.all,as.matrix(data.frame(from=c(0:11),to=c(0,0,0,0,0,1,1,1,1,0,0,0))))
+
+par(mfrow=c(2,2),oma = c(1,1,0,0) + 0.1,mar = c(2,2,2,2) + 0.1)
+plot(age1,main="1935-1951",axes=F,legend=F)
+plot(coasts,lwd=.5,add=T)
+plot(age2==1,main="1952-1977",axes=F,legend=F)
+plot(coasts,lwd=.5,add=T)
+plot(age3==1,main="1978-1990",axes=F,legend=F)
+plot(coasts,lwd=.5,add=T)
+plot(age4==1,main="1991-2000",axes=F,legend=F)
+plot(coasts,lwd=.5,add=T)
+par(mfrow=c(1,1))
+```
+
+Figure 10. Forest cover in Puerto Rico (1935-2000) based on historic aerial and satellite imagery (Helmer et al 2008).
+
+```{r}
+coords <- subset(anolis,!is.na(lat))
+#3. get % reports in forested habitats for each sp. 
+gundlachi.age2 <- subset(coords,ageClass %in% c(2) & species=="Anolis gundlachi")
+pts2 <- SpatialPoints(data.frame(gundlachi.age2$long,gundlachi.age2$lat),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
+gundlachi.age4 <- subset(coords,ageClass %in% c(4) & species=="Anolis gundlachi")
+pts4 <- SpatialPoints(data.frame(gundlachi.age4$long,gundlachi.age4$lat),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
+bgpts2 <- SpatialPoints(data.frame(coords$long[coords$ageClass %in% c(2)],coords$lat[coords$ageClass %in% c(2)]),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
+bgpts4 <- SpatialPoints(data.frame(coords$long[coords$ageClass %in% c(4)],coords$lat[coords$ageClass %in% c(4)]),proj4string = crs(proj4.wgs)) %>% spTransform(.,crs(proj4.utm))
+par(mfrow=c(2,1),oma = c(1,1,0,0) + 0.1,mar = c(2,2,2,2) + 0.1)
+plot(age2,main="A. gundlachi, 1960-1977",axes=F,legend=F)+plot(coasts,add=T)+points(bgpts2,cex=.7)+points(pts2,cex=.2,col="red")
+plot(age4,main="A. gundlachi, 1990-2015",axes=F,legend=F)+plot(coasts,add=T)+points(bgpts4,cex=.7)+points(pts4,cex=.2,col="red")
+par(mfrow=c(1,1))
+```
+
+Figure 11. *A. gundlachi* collections (red circles) and forest cover, by time period. Open black circles are *Anolis* collecting localities in the respective time period. 
+
+```{r warning=F,message=F}
+alt.250 <- alt1s<250 & alt1s>0 
+alt.250 <- reclassify(alt.250,rcl=cbind(0,NA))
+alt.250 <- projectRaster(alt.250,age2)
+alt.250 <- alt.250 > 0
+age1.250 <- mask(age1,alt.250)
+age2.250 <- mask(age2,alt.250)
+age3.250 <- mask(age3,alt.250)
+age4.250 <- mask(age4,alt.250)
+pc.forested <- c()
+for(i in list(age1.250,age2.250,age3.250,age4.250)){
+  tmp <- i %>% values() %>% na.omit() %>% mean()
+  pc.forested <- append(pc.forested,tmp)
+}
+pc.forested.all <- c()
+for(i in list(age1,age2,age3,age4)){
+  tmp <- i %>% values() %>% na.omit() %>% mean()
+  pc.forested.all <- append(pc.forested.all,tmp)
+}
+#df <- data.frame(ageClass=c("1935-1951","1952-1977","1978-1990","1991-2000"),pc.forested=pc.forested)
+
+df <- data.frame(year=c(1943,1965,1984,1995),low=pc.forested,all=pc.forested.all)
+df <- melt(df,"year")
+ggplot(data=df,aes(x=year,y=value,col=variable))+ylim(0,1)+geom_line()+geom_point()
+```
+
+Figure X. Change in percent forest cover, 1935-2000 (Helmer et al. 2008). 
+
+23.5% of all recent *A. gundlachi* collecting localities are in areas that transitioned from open to forested after 1977. For gundlachi specimens below 250M, that figure is 32%. 
+
+```{r warning=F,message=F}
+gund.locs.4 <- ddply(gundlachi.age4,.(long,lat),summarize,n=length(day)) %>% 
+                SpatialPoints(proj4string=crs(proj4.wgs)) %>% 
+                  spTransform(proj4.utm)
+gund.locs.4 <- SpatialPoints(coords=gundlachi.age4[,c("long","lat")],proj4string=crs(proj4.wgs)) %>% spTransform(proj4.utm)
+               
+reforested.index <- extract(age2,gund.locs.4)-extract(age4,gund.locs.4)
+plot(age4)+points(gund.locs.4)+points(gund.locs.4[reforested.index==-1],col="red",cex=0.5)
+length(reforested.index[reforested.index==-1])/length(reforested.index)
+
+##### NOTE: working on getting the % low-altitude gundlachi in transition forest areas. #START HERE 28 Sept. 
+gund.locs.4.low <- subset(gundlachi.age4,alt<250) %>% 
+                    ddply(.(long,lat),summarize,n=length(day)) %>% 
+                      SpatialPoints(proj4string=crs(proj4.wgs)) %>% 
+                        spTransform(proj4.utm)
+tmp <- subset(anolis,species=="Anolis gundlachi" & ageClass==4 & alt<= 250)
+gund.locs.4.low <- SpatialPoints(coords=tmp[,c("long","lat")],proj4string=crs(proj4.wgs)) %>% spTransform(proj4.utm)
+                 
+reforested.index <- extract(age2,gund.locs.4.low)-extract(age4,gund.locs.4.low)
+plot(age4)+points(gund.locs.4.low)+points(gund.locs.4.low[reforested.index==-1],col="red",cex=0.5)
+length(reforested.index[reforested.index==-1])/length(reforested.index)
+
+```
+
+Figure X. A. gundlachi collections after 1991 (black circles). Red circles indicate localities that transitioned from open to forested habitats.
+
 \newpage
 
-Hurricanes Hugo+George. Check A. cuvieri records (additional forest). Make sure we have Paul Hertz' localities. 
-Carabali site (near 191 @ low altitude ~ 20M)
+#Resurveyed Localities
+We identified two clusters of localities representing areas with over 100 specimens in each study period on mainland Puerto Rico: near the interection of PR-186 and PR-963 at an elevation range of 50-244M (i.e. "Ranger House"), and surrounding the El Verde Research Station on PR-186 roughly 3 km south of Ranger House at an elevation range of 210-457M. The proportion of *gundlachi* specimens was constant across time periods at El Verde Station, but increased from 0 to 7.3% at Ranger House. [working on chi-squared tests for these, but can say already that gundlachi will have no significant shift at El Verde and will be trivially significant at Ranger House bc there are 0 gundlachi in the earlier period.] 
+
+For reference, the (1km radius) area around Ranger House experienced an increase in forest coverage of roughly 20% from 1970 to 2000 (and 55% from 1951 to 2000), while El Verde was entirely forested across the study period. 
+
+```{r  warning=F,message=F}
+#clustering and ID'ing resurveyed localities
+anolis <- read.csv("~/Dropbox/anolis/data/anolis_data.csv")                  #read in 
+coords <- subset(anolis,!is.na(lat))                                    #pull rows with coordinates
+coords <- ddply(coords,.(eventID,long,lat,ageClass),summarize,nobs=length(day)) #summarize by locality+ageClass
+pts <- SpatialPoints(coords=data.frame(coords$long,coords$lat),proj4string=crs(proj4.wgs))
+dist <- spDists(pts,pts) %>% as.dist()                                       #get pairwise distance matrix
+fit <- hclust(dist,method="average")                                          #cluster
+clusters <- cutree(fit,h=1)                                                  #group points within h km
+coords$localityGroup <- clusters                                             #add clusters to locality summary
+anolis <- join(anolis,coords,by=c("eventID","long","lat","ageClass"))
+rsv <- subset(anolis,ageClass %in% c(2,4)) 
+groups <- ddply(rsv,.(localityGroup),summarize,nAgeClass=length(unique(ageClass))) %>% 
+  subset(nAgeClass>1) %>%
+    .$localityGroup  # find groups w multiple ageClasses
+rsv <- subset(rsv,localityGroup %in% groups)
+groups <- ddply(rsv,.(localityGroup,ageClass),summarize,n=length(day)) %>%   #find groups w min specimens > 10 per ageClass
+  ddply(.(localityGroup),summarize,min=min(n)) %>%
+  subset(min>=100) %>% 
+  .$localityGroup
+rsv <- subset(rsv,localityGroup %in% groups) 
+
+
+#check clusters
+pts1 <- SpatialPoints(subset(rsv,localityGroup==groups[1])[,c("long","lat")],
+                     proj4string=crs(proj4.wgs)) %>% spTransform(proj4.utm)
+pts2 <- SpatialPoints(subset(rsv,localityGroup==groups[2])[,c("long","lat")],
+                     proj4string=crs(proj4.wgs)) %>% spTransform(proj4.utm)
+plot(crop(age4,ext.yunque))+points(pts1,col="red")+points(pts2,col="blue")
+```
+
+Figure X. Resurveyed locality groups, clustered at 1km. Red is El Verde Station, Blue is the Ranger House/lowland PR-186 area. 
+
+```{r warning=F,message=F}
+#species composition by cluster
+spCounts <- ddply(rsv,.(localityGroup,ageClass,species),summarize,n=length(day))
+groupEffort <- ddply(rsv,.(localityGroup,ageClass),summarize,total=length(day))
+spCounts <- join(spCounts,groupEffort,by=c("localityGroup","ageClass"))
+spCounts$freq <- spCounts$n/spCounts$total
+spCounts$label <- strsplit(as.character(spCounts$species)," ") %>% sapply(function(e) e[2]) #strsplit's output is the worst
+spCounts$localityGroup <- as.factor(spCounts$localityGroup)
+
+#levels(spCounts$localityGroup) <- c("El Verde","Ranger House")
+
+#get change in frequency bw ageClasses by site/species
+diff <- ddply(spCounts,.(localityGroup,label),function(e) {
+  if(nrow(e) ==2){
+    diff <- e$freq[2]-e$freq[1]
+  }
+  if(nrow(e) == 1 & e$ageClass==4){
+    diff <- e$freq-0
+  }
+  if(nrow(e) == 1 & e$ageClass==2){
+    diff <- 0-e$freq
+  }
+  diff
+})
+
+ggplot(data=diff,aes(x=label,y=V1,fill=label))+
+  ylab("Change in Occurrence Frequency,\n 1955-1977 vs 1991-2015")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  facet_wrap(~localityGroup)+
+  geom_bar(stat="identity")
+
+#reformat change in frequency for geom_segment()
+diff <- ddply(spCounts,.(localityGroup,label),function(e) {
+  if(nrow(e) ==2){
+    start <- e$freq[1]
+    stop <- e$freq[2]
+  }
+  if(nrow(e) == 1 & e$ageClass==4){
+    start <- 0
+    stop <- e$freq
+  }
+  if(nrow(e) == 1 & e$ageClass==2){
+    start <- e$freq
+    stop <- 0
+  }
+  c(start,stop)
+})
+
+ggplot(data=diff,aes(x=label,xend=label,y=V1,yend=V2))+
+  facet_wrap(~localityGroup)+
+  ylab("Change in Occurrence Frequency,\n 1955-1977 vs 1991-2015")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  geom_segment(arrow=arrow(length=unit(0.2,"cm")))
+
+print(spCounts)
+```
+
+Figure X. Change in species proportions at resurveyed sites, 1952-1977 vs 1991-2015. 
+
+```{r,echo=T,warning=F}
+rh <- SpatialPoints(data.frame(long=-65.8254905,lat=18.3395686),proj4string = crs(proj4.wgs)) %>% 
+        spTransform(proj4.utm) %>% 
+          buffer(width=1000) 
+extract(age4,rh) %>% unlist() %>% mean() - extract(age2,rh) %>% unlist() %>% mean()
+
+rh <- SpatialPoints(data.frame(long=-65.8254905,lat=18.3395686),proj4string = crs(proj4.wgs)) %>% 
+        spTransform(proj4.utm) %>% 
+          buffer(width=1000) 
+extract(age4,rh) %>% unlist() %>% mean() - extract(age1,rh) %>% unlist() %>% mean()
+```
 
