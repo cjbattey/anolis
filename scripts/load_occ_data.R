@@ -170,6 +170,16 @@ anolis$ageClass[anolis$year>1951 & anolis$year<=1977] <- 2
 anolis$ageClass[anolis$year>1977 & anolis$year<=1990] <- 3
 anolis$ageClass[anolis$year>1990] <- 4
 
+#identify clusters of localities
+coords <- subset(anolis,!is.na(lat))                                    #pull rows with coordinates
+coords <- ddply(coords,.(eventID,long,lat,ageClass),summarize,nobs=length(day)) #summarize by locality+ageClass
+pts <- SpatialPoints(coords=data.frame(coords$long,coords$lat),proj4string=crs(proj4.wgs))
+dist <- spDists(pts,pts) %>% as.dist()                                       #get pairwise distance matrix
+fit <- hclust(dist,method="average")                                          #cluster
+clusters <- cutree(fit,h=1)                                                  #group points within h km
+coords$localityGroup <- clusters                                             #add clusters to locality summary
+anolis <- join(anolis,coords,by=c("eventID","long","lat","ageClass"))
+
 #binary columns for easy binning
 anolis$timebin <- factor(anolis$year < 1980)
 levels(anolis$timebin) <- c("1980-2015","1955-1979")
