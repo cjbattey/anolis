@@ -97,7 +97,7 @@ ggplot(data=a,aes(alt))+facet_wrap(~ageClass)+
 
 Figure X. Elevational distribution of all collecting effort, by age class. 
 
-```{r}
+```{r warning=F}
 #test for elevation shift on a per-specimen basis
 ddply(subset(anolis,ageClass %in% c(2,4)),.(species),function (i){
   t <- wilcox.test(i$alt[i$ageClass==4],i$alt[i$ageClass==2],conf.int=T)
@@ -133,13 +133,12 @@ ddply(subset(locs,ageClass %in% c(2,4)),.(species),function(i){
 Table 2. Results of wilcox tests on elevation distributions, by species and age class. 
 
 ```{r warning=F, fig.height=4, message=F,fig.width=6.5}
-df <- subset(locs,ageClass %in% c(2,4))
+df <- subset(anolis,ageClass %in% c(2,4))
 df$species <- "All species"
-df <-rbind(df,subset(locs,ageClass %in% c(2,4)))
+df <-rbind(df,subset(anolis,ageClass %in% c(2,4)))
 ggplot(data=df,aes(x=factor(ageClass),y=alt))+facet_grid(.~species)+theme_bw()+xlab("")+
   theme(axis.text.x = element_text(angle = 45, hjust = 1),strip.text.x=element_text(size=6))+
-  ggtitle("Median Report Elevation\n
-          1952-1977 vs 1991-2015")+
+  ggtitle("Median Report Elevation\n1952-1977 vs 1991-2015")+
   geom_point(size=.2,alpha=0.4,col="grey",position="jitter")+
   geom_boxplot(notch=F,outlier.colour = NA,fill=NA)
 ```
@@ -159,7 +158,7 @@ Supplementary Figure X. Elevation distributions by species and age class.
 
 ####Low-Elevation Species Composition
 
-Focusing only on specimens collected from sites below 250M, we foundnd that the proportions of all species are independent in the midcentury and recent time periods (Table X). These results were highly significant using both a chi-squared and McNemar test. In the case of *A. gundlachi*, the species represented less than 1% of the 3226 specimens collected below 250M from 1952-1977, and 8.2% from 1991-2015 (Table X).
+Focusing only on specimens collected from sites below 250M, we foundnd that the proportions of all species are independent in the midcentury and recent time periods (*p* < 0.01, Table X). In the case of *A. gundlachi*, the species represented less than 1% of the 3226 specimens collected below 250M from 1952-1977, and 8.2% from 1991-2015 (Table X).
 
 
 ```{r fig.width=2,fig.height=2.5}
@@ -209,7 +208,9 @@ chi2table
 
 Table X. Results of chi-squared tests on per-species specimen counts relative to all *Anolis* specimens from 1952-1977 and 1991-2015. 
 \newpage
+
 ####Landcover
+
 ```{r warning=F,message=F}
 setwd("~/Dropbox/anolis/")
 library(raster)
@@ -336,7 +337,8 @@ Figure X. A. gundlachi collections after 1991 (black circles). Red circles indic
 \newpage
 
 #Resurveyed Localities
-We identified two clusters of localities representing areas with over 100 specimens in each study period on mainland Puerto Rico: near the interection of PR-186 and PR-963 at an elevation range of 50-244M (i.e. "Ranger House"), and surrounding the El Verde Research Station on PR-186 roughly 3 km south of Ranger House at an elevation range of 210-457M. The proportion of *gundlachi* specimens was constant across time periods at El Verde Station, but increased from 0 to 3.2% at Ranger House. [working on chi-squared tests for these, but can say already that gundlachi will have no significant shift at El Verde and will be trivially significant at Ranger House bc there are 0 gundlachi in the earlier period.] 
+We identified two clusters of localities representing areas with over 100 specimens in each study period on mainland Puerto Rico: near the interection of PR-186 and PR-963 at an elevation range of 50-244M (i.e. "Ranger House"), and surrounding the El Verde Research Station on PR-186 roughly 3 km south of Ranger House at an elevation range of 210-457M. The proportion of *gundlachi* specimens was constant across time periods at El Verde Station, but increased from 0 to 3.2% at Ranger House.
+[working on chi-squared tests for these, but can say already that gundlachi will have no significant shift at El Verde and will be trivially significant at Ranger House bc there are 0 gundlachi in the earlier period.] 
 
 For reference, the (1km radius) area around Ranger House experienced an increase in forest coverage of roughly 20% from 1970 to 2000 (and 55% from 1951 to 2000), while El Verde was entirely forested across the study period. 
 

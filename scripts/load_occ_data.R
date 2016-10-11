@@ -1,6 +1,7 @@
 #load, filter, and georeference occurrence records
 setwd("~/Dropbox/anolis/")
-library(data.table);library(raster);library(ggplot2);library(plyr);library(foreach);library(stringr);library(magrittr);library(dismo);library(rgeos)
+library(data.table);library(raster);library(ggplot2);library(plyr);library(foreach);library(stringr);
+library(magrittr);library(dismo);library(rgeos)
 
 ################################# NOTE: DO NOT OPEN TABLES WITH EXCEL ##############################
 
@@ -19,7 +20,7 @@ alt <- raster("~/Dropbox/anolis/data/alt_30s_bil/alt.bil") %>% crop(ext.pr) %>%
 alt1s<- raster("~/Dropbox/anolis/data/elevation/PuertoRico_altitude_1sec_USGSNED2013.tif") %>% crop(ext.pr) %>% 
   projectRaster(.,projectExtent(.,proj4.utm))
 
-#remove embedded nulls (accented character issues...), read in data
+#remove embedded nulls & read in data
 file <- "./data/locs/gbif_PRanolis/occurrence.txt"
 tt <- tempfile()  
 system(paste0("tr < ", file, " -d '\\000' >", tt))
@@ -112,7 +113,6 @@ for(i in 1:nrow(anolis)){
 #############################################################
 ################ georeferencing + altitude ##################
 #############################################################
-#warning: potentially disastrous merge issues caused by special characters in verbatimLocality and recordedBy fields. 
 #add event ID for merge/split 
 anolis$eventID <- paste(anolis$institutionCode,anolis$locality,anolis$year,sep=",")
 
@@ -120,8 +120,8 @@ anolis$eventID <- paste(anolis$institutionCode,anolis$locality,anolis$year,sep="
 #loc <- ddply(anolis,.(locality,year,eventID,recordedBy,georeferenceSources,decimalLatitude,decimalLongitude,verbatimLocality),summarize,n=length(gbifID))
 #write.csv(loc,"anolis_localities_27sept2016.csv",row.names = F,fileEncoding = "UTF-8")
 
-#load georeferenced coordinates, use GPS where available
-localities <- read.csv("~/Dropbox/anolis/anolis_localities_30sept2016.csv",stringsAsFactors = F) %>% subset(!is.na(lat))
+#load georeferenced coordinates & use GPS where available
+localities <- read.csv("~/Dropbox/anolis/anolis_localities_30sept2016.csv",stringsAsFactors = F) %>% subset(!is.na(lat)) #note fread caused encoding issues with double-quotes.
 localities$long[grepl("GPS|gps",localities$georeferenceSources)] <- localities$decimalLongitude[grepl("GPS|gps",localities$georeferenceSources)]
 localities$lat[grepl("GPS|gps",localities$georeferenceSources)] <- localities$decimalLatitude[grepl("GPS|gps",localities$georeferenceSources)]
 localities$uncertainty[grepl("GPS|gps",localities$georeferenceSources)] <- 30
